@@ -1,25 +1,34 @@
 import requests
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel as FastAPIBaseModel
 from core.config import settings
 
-# 1. Initialize FastAPI FIRST
 api = FastAPI(title="Real Estate Lead Agent")
 
-# 2. Add CORS Middleware IMMEDIATELY after initialization
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://biswajeet1926.github.io", "http://localhost:5500", "http://127.0.0.1:5500"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ---------------------------------------------------------
+# BRUTE-FORCE CORS INTERCEPTOR
+# ---------------------------------------------------------
+@api.middleware("http")
+async def add_custom_cors_headers(request: Request, call_next):
+    # Intercept the browser's preflight check and force an "OK" with open headers
+    if request.method == "OPTIONS":
+        response = JSONResponse(content="OK")
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, DELETE, PUT"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
 
-# 3. Import LangGraph app AFTER middleware initialization to prevent route pre-registration conflicts
+    # Process normal requests and attach open headers to the response
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, DELETE, PUT"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
+# Import LangGraph app AFTER the middleware
 from graph.agent import app as langgraph_app
 
-# Pydantic schema for the Web Interface
 class ChatRequest(FastAPIBaseModel):
     user_message: str
     thread_id: str 
