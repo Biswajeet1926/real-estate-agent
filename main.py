@@ -3,20 +3,21 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as FastAPIBaseModel
 from core.config import settings
-from graph.agent import app as langgraph_app
 
+# 1. Initialize FastAPI FIRST
 api = FastAPI(title="Real Estate Lead Agent")
 
-# ---------------------------------------------------------
-# 1. CORS MIDDLEWARE (Allows your website to talk to FastAPI)
-# ---------------------------------------------------------
+# 2. Add CORS Middleware IMMEDIATELY after initialization
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows any website to connect. Safe for testing!
+    allow_origins=["https://biswajeet1926.github.io", "http://localhost:5500", "http://127.0.0.1:5500"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 3. Import LangGraph app AFTER middleware initialization to prevent route pre-registration conflicts
+from graph.agent import app as langgraph_app
 
 # Pydantic schema for the Web Interface
 class ChatRequest(FastAPIBaseModel):
@@ -24,13 +25,12 @@ class ChatRequest(FastAPIBaseModel):
     thread_id: str 
 
 # ---------------------------------------------------------
-# 2. THE WEB CHAT ROUTE (For your Website Widget)
+# THE WEB CHAT ROUTE
 # ---------------------------------------------------------
 @api.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     config = {"configurable": {"thread_id": req.thread_id}}
     try:
-        # Run the AI LangGraph state machine
         result = langgraph_app.invoke({"messages": [("user", req.user_message)]}, config)
         raw_content = result["messages"][-1].content
         
@@ -44,17 +44,16 @@ async def chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ---------------------------------------------------------
-# 3. THE TELEGRAM ROUTE (For your 24/7 Mobile Bot)
+# THE TELEGRAM ROUTE
 # ---------------------------------------------------------
 @api.post("/telegram")
 async def telegram_webhook(request: Request):
     data = await request.json()
     
-    # Ignore edits, channel posts, or non-text updates
     if "message" not in data or "text" not in data["message"]:
         return {"status": "ignored"}
         
-    chat_id = str(data["message"]["chat"]["id"])  # chat_id acts as the persistent thread_id
+    chat_id = str(data["message"]["chat"]["id"])
     user_text = data["message"]["text"]
     
     try:
@@ -67,7 +66,6 @@ async def telegram_webhook(request: Request):
         else:
             clean_text = raw_content
 
-        # Send the response back to the user via Telegram's API
         telegram_url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/sendMessage"
         payload = {
             "chat_id": chat_id,
