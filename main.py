@@ -1,41 +1,27 @@
 import requests
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as FastAPIBaseModel
+
+# Import your custom modules
 from core.config import settings
+from graph.agent import app as langgraph_app
 
 api = FastAPI(title="Real Estate Lead Agent")
 
-# ---------------------------------------------------------
-# BRUTE-FORCE CORS INTERCEPTOR
-# ---------------------------------------------------------
-@api.middleware("http")
-async def add_custom_cors_headers(request: Request, call_next):
-    # Intercept the browser's preflight check and force an "OK" with open headers
-    if request.method == "OPTIONS":
-        response = JSONResponse(content="OK")
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, DELETE, PUT"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        return response
-
-    # Process normal requests and attach open headers to the response
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, DELETE, PUT"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
-
-# Import LangGraph app AFTER the middleware
-from graph.agent import app as langgraph_app
+# Must be applied immediately after FastAPI initialization
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Wildcard allows all domains, preventing browser blocks
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ChatRequest(FastAPIBaseModel):
     user_message: str
     thread_id: str 
 
-# ---------------------------------------------------------
-# THE WEB CHAT ROUTE
-# ---------------------------------------------------------
 @api.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     config = {"configurable": {"thread_id": req.thread_id}}
@@ -52,9 +38,6 @@ async def chat_endpoint(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ---------------------------------------------------------
-# THE TELEGRAM ROUTE
-# ---------------------------------------------------------
 @api.post("/telegram")
 async def telegram_webhook(request: Request):
     data = await request.json()
