@@ -1,1 +1,1 @@
-web: uvicorn main:api --host 0.0.0.0 --port $env:PORT
+web: uvicorn main:api --host 0.0.0.0 --port $PORT
